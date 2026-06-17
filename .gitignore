@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+site/
+*.zip
+.venv/
+venv/
+.DS_Store
+# NOTE: *.duckdb files ARE committed on purpose — they hold the signal
+# time-series history that persists across scheduled CI runs.

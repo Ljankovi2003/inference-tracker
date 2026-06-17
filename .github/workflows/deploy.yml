@@ -1,0 +1,60 @@
+name: Build & deploy Inference Tracker
+
+on:
+  schedule:
+    - cron: "17 6 * * *"        # daily, 06:17 UTC
+  workflow_dispatch:             # manual "Run workflow" button
+  push:
+    branches: [main]
+
+permissions:
+  contents: write                # to commit refreshed databases back
+  pages: write                   # to deploy to GitHub Pages
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Poll live signals (public APIs, no auth)
+        run: |
+          python demand.py
+          python rates.py
+
+      - name: Build static site
+        run: python export_static.py
+
+      - name: Commit refreshed databases (history)
+        run: |
+          git config user.name "inference-tracker-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add *.duckdb
+          git diff --quiet --cached || git commit -m "chore: data refresh [skip ci]"
+          git push
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

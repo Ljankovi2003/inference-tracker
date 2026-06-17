@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inference Tracker · AKAM Signal Terminal</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  /* ---- navy / institutional palette ---- */
+  :root{
+    --navy:#003b77; --navy-deep:#012a55; --blue:#2470be; --blue-bright:#005fcc; --blue-light:#7cadf6;
+    --red:#ee3224;
+    --bg:#f7f8fb; --cream:#f8f5eb; --sand:#d9d5c8;
+    --card:#ffffff; --line:#e6e8ee; --line2:#eef0f4;
+    --ink:#1d2733; --text:#47494e; --muted:#7f828b; --faint:#9aa0ab;
+    --r:12px;
+    --shadow:0 1px 2px rgba(16,33,56,.05), 0 10px 30px rgba(0,59,119,.05);
+    --sans:"Helvetica Neue",Helvetica,"Segoe UI",Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Cascadia Code",Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;min-height:100vh;font-size:14px}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---- top bar ---- */
+  header{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:20px;
+    padding:15px 28px;background:var(--card);border-bottom:2px solid var(--navy);
+    box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .brand{display:flex;align-items:center;gap:13px}
+  .mark{width:4px;height:22px;background:var(--navy);border-radius:1px}
+  .wordmark{font-weight:700;letter-spacing:.30em;font-size:16px;color:var(--navy);padding-right:2px}
+  .divider{width:1px;height:24px;background:var(--line)}
+  .tagline{font-size:10.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted)}
+  .spacer{flex:1}
+  .stamp{font-size:11px;color:var(--muted);text-align:right;line-height:1.5}
+  .stamp b{color:var(--ink);font-weight:600}
+  .live{display:inline-flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--muted)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--blue);
+    animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(36,112,190,.45)}70%{box-shadow:0 0 0 7px rgba(36,112,190,0)}100%{box-shadow:0 0 0 0 rgba(36,112,190,0)}}
+  button.refresh{font:inherit;font-size:12px;letter-spacing:.04em;color:#fff;background:var(--navy);
+    border:0;border-radius:8px;padding:9px 16px;cursor:pointer;font-weight:600;
+    transition:transform .12s ease, background .15s ease, opacity .15s}
+  button.refresh:hover{background:var(--blue-bright)}
+  button.refresh:active{transform:translateY(1px)}
+  button.refresh:disabled{opacity:.5;cursor:wait}
+
+  /* ---- layout ---- */
+  main{padding:22px 28px 56px;max-width:1500px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:15px 18px;
+    position:relative;overflow:hidden;box-shadow:var(--shadow)}
+  .card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--navy)}
+  .card.blue::before{background:var(--blue)} .card.red::before{background:var(--red)}
+  .card.sand::before{background:var(--sand)}
+  .card .lab{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .card .val{font-size:29px;margin-top:7px;font-weight:700;line-height:1;color:var(--ink)}
+  .card .sub{font-size:11.5px;color:var(--faint);margin-top:7px}
+  .val.navy{color:var(--navy)} .val.blue{color:var(--blue)} .val.red{color:var(--red)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:15px 18px 8px;box-shadow:var(--shadow)}
+  .panel.full{grid-column:1 / -1}
+  .ptitle{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .ptitle h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--navy);
+    font-weight:700;margin:0}
+  .ptitle .hint{font-size:11px;color:var(--faint)}
+  .chart{width:100%;height:300px}
+  .chart.tall{height:430px}
+
+  /* feeds + signal */
+  .feed{max-height:300px;overflow:auto;padding:2px 2px 10px}
+  .row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line2);font-size:12.5px;color:var(--text)}
+  .row:last-child{border-bottom:0}
+  .chip{font-size:9.5px;letter-spacing:.06em;padding:3px 8px;border-radius:999px;font-weight:700;text-transform:uppercase}
+  .chip.up{background:rgba(36,112,190,.12);color:var(--blue)}
+  .chip.down{background:rgba(238,50,36,.12);color:var(--red)}
+  .row .when{color:var(--faint);margin-left:auto;font-size:11px}
+  .empty{color:var(--faint);font-size:12.5px;padding:18px 4px;text-align:center}
+
+  .signal ul{margin:0;padding:0}
+  .signal li{list-style:none;display:flex;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line2);font-size:13px;line-height:1.5;color:var(--text)}
+  .signal .tag{flex:0 0 26px;color:var(--navy);font-weight:700;font-size:12px}
+  .signal b{color:var(--ink)}
+  .signal .watch{color:var(--muted);font-size:12.5px}
+  .signal .box{flex:0 0 16px;color:var(--faint)}
+  footer{color:var(--faint);font-size:11px;text-align:center;margin-top:26px;letter-spacing:.03em}
+  @media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="mark"></span>
+    <span class="wordmark">INFERENCE&nbsp;TRACKER</span>
+  </div>
+  <div class="divider"></div>
+  <div class="tagline">AKAM · Cloud Infrastructure Signal Terminal</div>
+  <div class="spacer"></div>
+  <div class="live"><span class="dot"></span>Live</div>
+  <div class="stamp" id="stamp">snapshot<br><b id="stampts">—</b></div>
+  <button class="refresh" id="refreshBtn">↻ Poll live APIs</button>
+</header>
+
+<main>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grid">
+    <div class="panel full">
+      <div class="ptitle"><h2>GPU Availability Over Time</h2><span class="hint">plan×region in stock vs sold-out, per snapshot</span></div>
+      <div class="chart" id="c_avail_ts"></div>
+    </div>
+
+    <div class="panel">
+      <div class="ptitle"><h2>Availability by Region</h2><span class="hint">◆ = new-gen DC · plans in stock / 13</span></div>
+      <div class="chart tall" id="c_regions"></div>
+    </div>
+    <div class="panel">
+      <div class="ptitle"><h2>GPU Price Ladder</h2><span class="hint">$ / hr · list tier</span></div>
+      <div class="chart tall" id="c_ladder"></div>
+    </div>
+
+    <div class="panel">
+      <div class="ptitle"><h2>Price Floor / Ceiling Over Time</h2><span class="hint">$ / hr</span></div>
+      <div class="chart" id="c_price_ts"></div>
+    </div>
+    <div class="panel signal">
+      <div class="ptitle"><h2>Signal Read · Bear-Case Watch</h2></div>
+      <div id="signal"></div>
+    </div>
+
+    <div class="panel">
+      <div class="ptitle"><h2>Availability Transitions</h2><span class="hint">sold-out ↔ capacity added</span></div>
+      <div class="feed" id="transitions"></div>
+    </div>
+    <div class="panel">
+      <div class="ptitle"><h2>Price Changes</h2><span class="hint">list-tier moves</span></div>
+      <div class="feed" id="changes"></div>
+    </div>
+  </section>
+
+  <footer>Inference Tracker · AKAM · signals are public-API derived · not investment advice</footer>
+</main>
+
+<script>
+const NAVY="#003b77", BLUE="#2470be", BLUEH="#005fcc", RED="#ee3224",
+      TEXT="#47494e", MUTED="#7f828b", FAINT="#9aa0ab", LINE="rgba(16,33,56,.08)";
+const charts={};
+function fmtTs(s){ if(!s) return "—"; const d=new Date(s.replace(' ','T')); if(isNaN(d)) return s.slice(0,16);
+  return d.toLocaleString(undefined,{month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+function usd(n,d=2){ return n==null?"—":"$"+Number(n).toFixed(d); }
+
+const axisCommon = {
+  axisLine:{lineStyle:{color:LINE}}, axisTick:{show:false},
+  axisLabel:{color:MUTED,fontSize:11}, splitLine:{lineStyle:{color:LINE}},
+};
+function mk(id){ if(charts[id]) return charts[id]; charts[id]=echarts.init(document.getElementById(id),null,{renderer:'canvas'}); return charts[id]; }
+const tooltip = {backgroundColor:'#ffffff', borderColor:'rgba(16,33,56,.12)',
+  textStyle:{color:TEXT,fontSize:12}, borderWidth:1,
+  extraCssText:'box-shadow:0 6px 24px rgba(0,59,119,.12);border-radius:8px'};
+
+function renderKpis(d){
+  const regs=d.availability.regions||[];
+  const inStock=regs.filter(r=>r.avail>0).length;
+  const totalRegs=regs.length;
+  const availPlans=regs.reduce((a,r)=>a+r.avail,0);
+  const totalPlans=regs.reduce((a,r)=>a+r.total,0);
+  const pct=totalPlans? Math.round(availPlans/totalPlans*100):0;
+  const ladder=d.rates.ladder||[];
+  const hrs=ladder.map(x=>x.hourly).filter(x=>x!=null);
+  const floor=hrs.length?Math.min(...hrs):null, ceil=hrs.length?Math.max(...hrs):null;
+  const bw=(d.availability.blackwell||[]).length;
+  const cards=[
+    {lab:"Regions In Stock", val:inStock, accent:"", vcls:"navy", sub:`of ${totalRegs} GPU regions`},
+    {lab:"GPU Plans Available", val:availPlans, accent:"blue", vcls:"blue", sub:`${pct}% of ${totalPlans} plan×region`},
+    {lab:"Price Floor", val:usd(floor), accent:"blue", vcls:"blue", sub:"cheapest GPU / hr"},
+    {lab:"Price Ceiling", val:usd(ceil), accent:"red", vcls:"red", sub:"priciest GPU / hr"},
+    {lab:"Blackwell $2.50", val: bw>0?bw:"—", accent:"sand", vcls:"navy", sub: bw>0?"SKUs in catalog":"not in public catalog"},
+  ];
+  document.getElementById('kpis').innerHTML = cards.map(c=>
+    `<div class="card ${c.accent}"><div class="lab">${c.lab}</div><div class="val ${c.vcls}">${c.val}</div><div class="sub">${c.sub}</div></div>`).join('');
+}
+
+function renderAvailTs(d){
+  const s=d.availability.series||[];
+  const x=s.map(p=>fmtTs(p.ts));
+  const opt={tooltip:{...tooltip,trigger:'axis'}, grid:{left:48,right:18,top:24,bottom:30},
+    legend:{data:['In stock','Sold-out'],textStyle:{color:MUTED},right:8,top:0,itemWidth:10,itemHeight:10},
+    xAxis:{type:'category',data:x,boundaryGap:false,...axisCommon},
+    yAxis:{type:'value',...axisCommon},
+    series:[
+      {name:'In stock',type:'line',stack:'t',smooth:true,symbol:'none',data:s.map(p=>p.avail),
+        lineStyle:{color:BLUE,width:2}, areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(36,112,190,.32)'},{offset:1,color:'rgba(36,112,190,.03)'}])}},
+      {name:'Sold-out',type:'line',stack:'t',smooth:true,symbol:'none',data:s.map(p=>p.soldout),
+        lineStyle:{color:RED,width:2}, areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(238,50,36,.26)'},{offset:1,color:'rgba(238,50,36,.02)'}])}},
+    ]};
+  mk('c_avail_ts').setOption(opt,true);
+}
+
+function renderRegions(d){
+  const regs=[...(d.availability.regions||[])].sort((a,b)=>a.avail-b.avail);
+  const names=regs.map(r=>(r.isNew?"◆ ":"")+r.name);
+  const opt={tooltip:{...tooltip,trigger:'axis',axisPointer:{type:'shadow'},
+      formatter:p=>{const r=regs[p[0].dataIndex];return `${r.name}<br/><b>${r.avail}</b> / ${r.total} plans in stock`;}},
+    grid:{left:96,right:24,top:10,bottom:24},
+    xAxis:{type:'value',max:13,...axisCommon},
+    yAxis:{type:'category',data:names,axisLabel:{color:TEXT,fontSize:10.5},axisLine:{lineStyle:{color:LINE}},axisTick:{show:false}},
+    series:[{type:'bar',data:regs.map(r=>r.avail),barWidth:'62%',
+      itemStyle:{borderRadius:[0,4,4,0],color:p=>{const v=p.value; return v===0?'rgba(238,50,36,.45)': new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:BLUE},{offset:1,color:NAVY}]);}}}]};
+  mk('c_regions').setOption(opt,true);
+}
+
+function renderLadder(d){
+  const L=[...(d.rates.ladder||[])].sort((a,b)=>(a.hourly||0)-(b.hourly||0));
+  const short=p=>p.replace(/^g\d-gpu-/,'').replace('rtx','');
+  const opt={tooltip:{...tooltip,trigger:'axis',axisPointer:{type:'shadow'},
+      formatter:p=>{const r=L[p[0].dataIndex];return `${r.label||r.plan}<br/><b>${usd(r.hourly)}</b>/hr · ${usd(r.monthly,0)}/mo`;}},
+    grid:{left:44,right:16,top:30,bottom:78},
+    xAxis:{type:'category',data:L.map(r=>short(r.plan)),axisLabel:{color:MUTED,fontSize:9.5,rotate:52},axisLine:{lineStyle:{color:LINE}},axisTick:{show:false}},
+    yAxis:{type:'value',...axisCommon,axisLabel:{color:MUTED,fontSize:11,formatter:'${value}'}},
+    series:[{type:'bar',data:L.map(r=>r.hourly),barWidth:'58%',
+      itemStyle:{borderRadius:[4,4,0,0],color:p=>{const id=L[p.dataIndex].plan; return id.startsWith('g1-')?'#9aa0ab':new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:BLUE},{offset:1,color:NAVY}]);}},
+      markLine:{symbol:'none',label:{color:RED,fontSize:10,formatter:'Mgmt target $2.50'},
+        lineStyle:{color:RED,type:'dashed',width:1.4},data:[{yAxis:2.5}]}}]};
+  mk('c_ladder').setOption(opt,true);
+}
+
+function renderPriceTs(d){
+  const s=d.rates.series||[];
+  const x=s.map(p=>fmtTs(p.ts));
+  const line=(name,key,color)=>({name,type:'line',smooth:true,symbol:'circle',symbolSize:5,
+    data:s.map(p=>p[key]),lineStyle:{color,width:2},itemStyle:{color}});
+  const opt={tooltip:{...tooltip,trigger:'axis',valueFormatter:v=>usd(v)},
+    legend:{data:['Floor','Median','Ceiling'],textStyle:{color:MUTED},right:8,top:0,itemWidth:10,itemHeight:10},
+    grid:{left:48,right:18,top:24,bottom:30},
+    xAxis:{type:'category',data:x,boundaryGap:false,...axisCommon},
+    yAxis:{type:'value',...axisCommon,axisLabel:{color:MUTED,fontSize:11,formatter:'${value}'}},
+    series:[line('Floor','floor',BLUE),line('Median','median',NAVY),line('Ceiling','ceiling',RED),
+      {name:'_t',type:'line',data:s.map(()=>2.5),symbol:'none',lineStyle:{color:RED,type:'dashed',width:1,opacity:.5}}]};
+  mk('c_price_ts').setOption(opt,true);
+}
+
+function renderFeeds(d){
+  const tr=d.availability.transitions||[];
+  const te=document.getElementById('transitions');
+  te.innerHTML = tr.length? tr.map(t=>{
+    const added=t.to===true; return `<div class="row"><span class="chip ${added?'up':'down'}">${added?'+ Added':'Sold out'}</span>
+      <span>${t.region} · <span class="mono">${t.plan}</span></span><span class="when">${fmtTs(t.ts)}</span></div>`;
+  }).join('') : `<div class="empty">No transitions recorded yet — availability stable since tracking began.</div>`;
+
+  const ch=d.rates.changes||[];
+  const ce=document.getElementById('changes');
+  ce.innerHTML = ch.length? ch.map(c=>{
+    const up=c.dir==='UP'; return `<div class="row"><span class="chip ${up?'up':'down'}">${up?'▲':'▼'} ${c.pct==null?'':c.pct.toFixed(1)+'%'}</span>
+      <span class="mono">${c.plan}</span><span>${usd(c.old)} → ${usd(c.new)}</span><span class="when">${fmtTs(c.ts)}</span></div>`;
+  }).join('') : `<div class="empty">No list-price changes detected — pricing is stable.</div>`;
+}
+
+function renderSignal(d){
+  const regs=d.availability.regions||[];
+  const inStock=regs.filter(r=>r.avail>0);
+  const newStock=inStock.filter(r=>r.isNew).length;
+  const ladder=d.rates.ladder||[];
+  const hrs=ladder.map(x=>x.hourly).filter(x=>x!=null);
+  const floor=hrs.length?Math.min(...hrs):null, ceil=hrs.length?Math.max(...hrs):null;
+  const bw=(d.availability.blackwell||[]).length;
+  const reads=[
+    ['A1', `<b>${inStock.length}</b> regions in stock — ${newStock} are new-gen DCs. Legacy metros sold out; supply being added in new sites (neutral-to-soft, not screaming-tight).`],
+    ['A2', `Floor ${usd(floor)} · ceiling ${usd(ceil)}/hr. Mgmt $2.50 Blackwell target ${bw>0?'<b>now in catalog</b>':'not yet in public catalog'}.`],
+    ['A3', `Realized CIS rev/MW — ${ (d.cis&&!d.cis.empty)?'loaded from filings':'no filings loaded on this host (A3 off)'}.`],
+  ];
+  const watch=[
+    'A1: in-stock count climbing across regions → capacity glut',
+    'A2: promo SKU or list cut below $2.50 → discount-to-fill',
+    'A3: Rev/MW declining despite MW additions → fill rate softening',
+    'Blackwell (g3-gpu / rtx6000pro) launch slips past H2-2026',
+  ];
+  document.getElementById('signal').innerHTML =
+    `<ul>${reads.map(r=>`<li><span class="tag">${r[0]}</span><span>${r[1]}</span></li>`).join('')}
+      ${watch.map(w=>`<li><span class="box">☐</span><span class="watch">${w}</span></li>`).join('')}</ul>`;
+}
+
+function render(d){
+  document.getElementById('stampts').textContent = fmtTs(d.availability.latest_ts);
+  renderKpis(d); renderAvailTs(d); renderRegions(d); renderLadder(d); renderPriceTs(d); renderFeeds(d); renderSignal(d);
+  if(d.refresh_errors && Object.keys(d.refresh_errors).length){ console.warn('refresh errors', d.refresh_errors); }
+}
+
+// Dual-mode: live server exposes /api/data + /api/refresh; the published
+// static build has neither, so fall back to a pre-generated ./data.json and
+// hide the (server-only) refresh button.
+let STATIC=false;
+async function loadData(){
+  try{ const r=await fetch('/api/data',{cache:'no-store'}); if(r.ok) return await r.json(); }catch(e){}
+  STATIC=true;
+  const r=await fetch('./data.json',{cache:'no-store'}); return r.json();
+}
+async function refreshData(){ const r=await fetch('/api/refresh',{method:'POST'}); return r.json(); }
+const btn=document.getElementById('refreshBtn');
+async function init(){ const d=await loadData(); if(STATIC) btn.style.display='none'; render(d); }
+btn.addEventListener('click', async()=>{
+  btn.disabled=true; const t=btn.textContent; btn.textContent='↻ Polling…';
+  try{ render(await refreshData()); } catch(e){ console.error(e); }
+  finally{ btn.disabled=false; btn.textContent=t; }
+});
+window.addEventListener('resize', ()=>Object.values(charts).forEach(c=>c.resize()));
+init();
+</script>
+</body>
+</html>
