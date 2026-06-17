@@ -1,3 +1,4 @@
 duckdb>=1.0
+pytz
 # pandas is only needed for snapshot.py's text report (uses .fetchdf());
 # the dashboard, collectors, and static export do not require it.
