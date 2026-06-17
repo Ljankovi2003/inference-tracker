@@ -308,7 +308,13 @@ btn.addEventListener('click', async()=>{
   finally{ btn.disabled=false; btn.textContent=t; }
 });
 window.addEventListener('resize', ()=>Object.values(charts).forEach(c=>c.resize()));
-init();
+init().then(()=>{
+  // auto-poll every 60 s when running against the live server (not static)
+  setInterval(async()=>{
+    if(STATIC) return;
+    try{ render(await refreshData()); } catch(e){ console.warn('auto-poll failed', e); }
+  }, 60_000);
+});
 </script>
 </body>
 </html>
